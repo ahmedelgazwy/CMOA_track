@@ -158,7 +158,7 @@ def build_dataloaders(cfg, settings):
 def get_optimizer_scheduler(net, cfg, settings):
     tracker_name = settings.script_name
 
-    # Visual Encoder
+    net = net.module if hasattr(net, 'module') else net  
     param_dicts = [
         {"params": [p for n, p in net.named_parameters() if "backbone" not in n and p.requires_grad]},
         {

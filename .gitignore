@@ -1,0 +1,27 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+env/
+venv/
+
+# Checkpoints & logs
+*.pth
+*.pth.tar
+*.pt
+output/
+tensorboard/
+wandb/
+
+# Dataset zips
+*.zip
+*.tar
+*.tar.gz
+
+# OS files
+.DS_Store
+Thumbs.db

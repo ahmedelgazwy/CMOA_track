@@ -1,3 +1,5 @@
+# lib/models/odtrack/odtrack.py
+
 import math
 import os
 from typing import List
@@ -10,20 +12,26 @@ from lib.models.layers.head import build_box_head
 from lib.models.odtrack.vit import vit_base_patch16_224, vit_large_patch16_224
 from lib.models.odtrack.vit_ce import vit_large_patch16_224_ce, vit_base_patch16_224_ce
 from lib.utils.box_ops import box_xyxy_to_cxcywh
+# ---- START OF MODIFICATION ----
+from ..lora_util import inject_trainable_moe_kronecker_new
+# ---- END OF MODIFICATION ----
 
 
 class ODTrack(nn.Module):
     """ This is the base class for MMTrack """
 
-    def __init__(self, transformer, box_head, aux_loss=False, head_type="CORNER", token_len=1):
+    # ---- START OF MODIFICATION ----
+    def __init__(self, transformer, box_head, cfg, aux_loss=False, head_type="CORNER", token_len=1):
         """ Initializes the model.
         Parameters:
             transformer: torch module of the transformer architecture.
             aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
+            cfg: The experiment configuration dictionary.
         """
         super().__init__()
         self.backbone = transformer
         self.box_head = box_head
+        self.cfg = cfg  # Store cfg
 
         self.aux_loss = aux_loss
         self.head_type = head_type
@@ -37,6 +45,9 @@ class ODTrack(nn.Module):
         # track query: save the history information of the previous frame
         self.track_query = None
         self.token_len = token_len
+        # This will be populated by build_odtrack if MoE is used
+        self.moe_params = None
+    # ---- END OF MODIFICATION ----
 
     def forward(self, template: torch.Tensor,
                 search: torch.Tensor,
@@ -67,6 +78,16 @@ class ODTrack(nn.Module):
 
             out.update(aux_dict)
             out['backbone_feat'] = x
+            
+            # ---- START OF MODIFICATION ----
+            # Collect MoE auxiliary loss from the backbone
+            if self.cfg.MODEL.BACKBONE.USE_MOE:
+                aux_loss_total = 0.0
+                for module in self.backbone.modules():
+                    if hasattr(module, 'aux_loss'):
+                        aux_loss_total += module.aux_loss
+                out['aux_loss'] = aux_loss_total
+            # ---- END OF MODIFICATION ----
             
             out_dict.append(out)
             
@@ -153,9 +174,43 @@ def build_odtrack(cfg, training=True):
     model = ODTrack(
         backbone,
         box_head,
+        # ---- START OF MODIFICATION ----
+        cfg,
+        # ---- END OF MODIFICATION ----
         aux_loss=False,
         head_type=cfg.MODEL.HEAD.TYPE,
         token_len=cfg.MODEL.BACKBONE.TOKEN_LEN,
     )
+
+    # ---- START OF MODIFICATION ----
+    # Inject MoE layers if configured for training
+    if cfg.MODEL.BACKBONE.USE_MOE:
+        print("Injecting Mixture of Kronecker Experts (MoE) layers and freezing original backbone...")
+        
+        # Freeze all original backbone parameters for adapter-style tuning
+        for param in model.backbone.parameters():
+            param.requires_grad = False
+            
+        moe_params_generators, _ = inject_trainable_moe_kronecker_new(
+            model.backbone,
+            target_replace_module=set(cfg.MODEL.BACKBONE.MOE_TARGET_MODULES),
+            where=cfg.MODEL.BACKBONE.MOE_WHERE,
+        )
+
+        # The injection function unfreezes the new parameters it creates.
+        # We collect these trainable parameters to pass to the optimizer.
+        if training:
+            moe_params_list = []
+            for param_gen in moe_params_generators:
+                if isinstance(param_gen, torch.nn.Parameter):
+                    moe_params_list.append(param_gen)
+                else:
+                    moe_params_list.extend(list(param_gen))
+        
+            model.moe_params = moe_params_list
+            print(f"Successfully injected MoE layers. Target modules: {cfg.MODEL.BACKBONE.MOE_TARGET_MODULES}, Where: {cfg.MODEL.BACKBONE.MOE_WHERE}")
+        else:
+            print("Successfully injected MoE layers for testing.")
+    # ---- END OF MODIFICATION ----
 
     return model

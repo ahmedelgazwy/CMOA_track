@@ -27,6 +27,13 @@ cfg.MODEL.BACKBONE.TOKEN_LEN = 1
 cfg.MODEL.BACKBONE.CLS_TOKEN_USE_MODE = 'ignore'
 cfg.MODEL.BACKBONE.ATTN_TYPE = 'concat'
 
+# ---- START OF MODIFICATION ----
+# Add new MoE parameters
+cfg.MODEL.BACKBONE.USE_MOE = False
+cfg.MODEL.BACKBONE.MOE_TARGET_MODULES = ["Attention"]  # Modules to inject adapters into
+cfg.MODEL.BACKBONE.MOE_WHERE = 'every'  # Injection location: 'every', 'last', etc.
+# ---- END OF MODIFICATION ----
+
 cfg.MODEL.BACKBONE.CE_LOC = []
 cfg.MODEL.BACKBONE.CE_KEEP_RATIO = []
 cfg.MODEL.BACKBONE.CE_TEMPLATE_RANGE = 'ALL'  # choose between ALL, CTR_POINT, CTR_REC, GT_BOX
@@ -55,6 +62,11 @@ cfg.TRAIN.VAL_EPOCH_INTERVAL = 20
 cfg.TRAIN.GRAD_CLIP_NORM = 0.1
 cfg.TRAIN.AMP = False
 cfg.TRAIN.BBOX_TASK = False
+
+# ---- START OF MODIFICATION ----
+# Add new MoE aux loss weight
+cfg.TRAIN.MOE_AUX_WEIGHT = 0.01
+# ---- END OF MODIFICATION ----
 
 cfg.TRAIN.CE_START_EPOCH = 20  # candidate elimination start epoch
 cfg.TRAIN.CE_WARM_EPOCH = 80  # candidate elimination warm up epoch

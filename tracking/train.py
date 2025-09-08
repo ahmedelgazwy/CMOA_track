@@ -43,13 +43,13 @@ def main():
                     % (args.script, args.config, args.save_dir, args.use_lmdb, args.script_prv, args.config_prv,
                        args.distill, args.script_teacher, args.config_teacher, args.use_wandb)
     elif args.mode == "multiple":
-        train_cmd = "python -m torch.distributed.launch --nproc_per_node %d --master_port %d lib/train/run_training.py " \
+        train_cmd = "torchrun --nproc_per_node %d --master_port %d lib/train/run_training.py " \
                     "--script %s --config %s --save_dir %s --use_lmdb %d --script_prv %s --config_prv %s --use_wandb %d " \
                     "--distill %d --script_teacher %s --config_teacher %s" \
                     % (args.nproc_per_node, random.randint(10000, 50000), args.script, args.config, args.save_dir, args.use_lmdb, args.script_prv, args.config_prv, args.use_wandb,
                        args.distill, args.script_teacher, args.config_teacher)
     elif args.mode == "multi_node":
-        train_cmd = "python -m torch.distributed.launch --nproc_per_node %d --master_addr %s --master_port %d --nnodes %d --node_rank %d lib/train/run_training.py " \
+        train_cmd = "torchrun --nproc_per_node %d --master_addr %s --master_port %d --nnodes %d --node_rank %d lib/train/run_training.py " \
                     "--script %s --config %s --save_dir %s --use_lmdb %d --script_prv %s --config_prv %s --use_wandb %d " \
                     "--distill %d --script_teacher %s --config_teacher %s" \
                     % (args.nproc_per_node, args.ip, args.port, args.world_size, args.rank, args.script, args.config, args.save_dir, args.use_lmdb, args.script_prv, args.config_prv, args.use_wandb,

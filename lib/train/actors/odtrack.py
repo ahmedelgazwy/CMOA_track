@@ -16,6 +16,11 @@ class ODTrackActor(BaseActor):
         self.settings = settings
         self.bs = self.settings.batchsize  # batch size
         self.cfg = cfg
+        # ---- START OF MODIFICATION ----
+        # Add weight for MoE auxiliary loss if it's used
+        if self.cfg.MODEL.BACKBONE.USE_MOE:
+            self.loss_weight['aux'] = self.cfg.TRAIN.MOE_AUX_WEIGHT
+        # ---- END OF MODIFICATION ----
 
     def __call__(self, data):
         """
@@ -115,6 +120,16 @@ class ODTrackActor(BaseActor):
             else:
                 location_loss = torch.tensor(0.0, device=l1_loss.device)
             loss_dict['focal'] = location_loss
+            
+            # ---- START OF MODIFICATION ----
+            # Add MoE auxiliary loss
+            if 'aux_loss' in pred_dict[i]:
+                aux_loss = pred_dict[i]['aux_loss']
+                if isinstance(aux_loss, torch.Tensor):
+                    loss_dict['aux'] = aux_loss
+            else:
+                aux_loss = torch.tensor(0.0, device=l1_loss.device)
+            # ---- END OF MODIFICATION ----
                 
             # weighted sum
             loss = sum(loss_dict[k] * self.loss_weight[k] for k in loss_dict.keys() if k in self.loss_weight)
@@ -130,6 +145,11 @@ class ODTrackActor(BaseActor):
                         f"{i}frame_Loss/l1": l1_loss.item(),
                         f"{i}frame_Loss/location": location_loss.item(),
                         f"{i}frame_IoU": mean_iou.item()}
+                
+                # ---- START OF MODIFICATION ----
+                if 'aux' in loss_dict:
+                    status[f"{i}frame_Loss/aux"] = aux_loss.item()
+                # ---- END OF MODIFICATION ----
                     
                 total_status.update(status)
 

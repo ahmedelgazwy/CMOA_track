@@ -93,11 +93,10 @@ def main():
     parser.add_argument('--config_teacher', type=str, help='teacher yaml configure file name')
 
     args = parser.parse_args()
+    args.local_rank = int(os.environ["LOCAL_RANK"])
     if args.local_rank != -1:
         dist.init_process_group(backend='nccl')
         torch.cuda.set_device(args.local_rank)
-    else:
-        torch.cuda.set_device(0)
     run_training(args.script, args.config, cudnn_benchmark=args.cudnn_benchmark,
                  local_rank=args.local_rank, save_dir=args.save_dir, base_seed=args.seed,
                  use_lmdb=args.use_lmdb, script_name_prv=args.script_prv, config_name_prv=args.config_prv,

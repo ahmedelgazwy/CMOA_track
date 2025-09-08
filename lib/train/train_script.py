@@ -53,7 +53,8 @@ def run(settings):
 
     # Create network
     if settings.script_name == "odtrack":
-        net = build_odtrack(cfg)
+        # Pass training=True to ensure MoE layers are injected
+        net = build_odtrack(cfg, training=True)
     else:
         raise ValueError("illegal script name")
 
@@ -79,6 +80,18 @@ def run(settings):
     else:
         raise ValueError("illegal script name")
 
+    # ---- START OF MODIFICATION ----
+    model_without_ddp = net.module if settings.local_rank != -1 else net
+    
+    if cfg.MODEL.BACKBONE.USE_MOE:
+        # If MoE is used, we only want to train the head and the new adapter parameters.
+        # The original backbone parameters were already set to requires_grad=False in `build_odtrack`.
+        print("MoE training is enabled. The optimizer will only see head and adapter parameters.")
+        # The get_optimizer_scheduler function will now automatically pick up only the parameters
+        # with requires_grad=True, which are the head and the MoE adapters.
+        # We just need to make sure the learning rate for the backbone (adapters) is not scaled down.
+        cfg.TRAIN.BACKBONE_MULTIPLIER = 1.0 
+    # ---- END OF MODIFICATION ----
 
     # Optimizer, parameters, and learning rates
     optimizer, lr_scheduler = get_optimizer_scheduler(net, cfg, settings)
