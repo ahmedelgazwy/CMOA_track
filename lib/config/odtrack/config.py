@@ -26,12 +26,15 @@ cfg.MODEL.BACKBONE.ADD_CLS_TOKEN = False
 cfg.MODEL.BACKBONE.TOKEN_LEN = 1
 cfg.MODEL.BACKBONE.CLS_TOKEN_USE_MODE = 'ignore'
 cfg.MODEL.BACKBONE.ATTN_TYPE = 'concat'
-
 # ---- START OF MODIFICATION ----
-# Add new MoE parameters
+# Add new MoE parameters with defaults
 cfg.MODEL.BACKBONE.USE_MOE = False
-cfg.MODEL.BACKBONE.MOE_TARGET_MODULES = ["Attention"]  # Modules to inject adapters into
-cfg.MODEL.BACKBONE.MOE_WHERE = 'every'  # Injection location: 'every', 'last', etc.
+cfg.MODEL.BACKBONE.MOE_TARGET_MODULES = ["Attention"]
+cfg.MODEL.BACKBONE.MOE_WHERE = 'every'
+cfg.MODEL.BACKBONE.MOE_EXPERTS = 4
+cfg.MODEL.BACKBONE.MOE_RANKS = []  # Empty list signals dynamic rank generation
+cfg.MODEL.BACKBONE.MOE_TOP_K = 1
+cfg.MODEL.BACKBONE.MOE_TYPE = 'kronecker'
 # ---- END OF MODIFICATION ----
 
 cfg.MODEL.BACKBONE.CE_LOC = []

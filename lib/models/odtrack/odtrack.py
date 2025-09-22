@@ -183,32 +183,42 @@ def build_odtrack(cfg, training=True):
     )
 
     # ---- START OF MODIFICATION ----
-    # Inject MoE layers if configured for training
+    # Inject MoE layers if configured, regardless of training or testing mode
     if cfg.MODEL.BACKBONE.USE_MOE:
-        print("Injecting Mixture of Kronecker Experts (MoE) layers and freezing original backbone...")
+        print("Injecting Mixture of Experts (MoE) layers...")
         
-        # Freeze all original backbone parameters for adapter-style tuning
         for param in model.backbone.parameters():
             param.requires_grad = False
             
-        moe_params_generators, _ = inject_trainable_moe_kronecker_new(
+        # Select the correct injection function based on moe_type
+        if cfg.MODEL.BACKBONE.MOE_TYPE == 'kronecker':
+            injection_fn = inject_trainable_moe_kronecker_new
+        elif cfg.MODEL.BACKBONE.MOE_TYPE == 'lora':
+            # Assuming MOELoraInjectedLinear is the desired class from lora_util.py
+            injection_fn = inject_trainable_moe_lora
+        else:
+            raise ValueError(f"Unknown MoE type: {cfg.MODEL.BACKBONE.MOE_TYPE}")
+
+        moe_params_generators, _ = injection_fn(
             model.backbone,
             target_replace_module=set(cfg.MODEL.BACKBONE.MOE_TARGET_MODULES),
             where=cfg.MODEL.BACKBONE.MOE_WHERE,
+            # Pass new parameters to the injection function
+            n=cfg.MODEL.BACKBONE.MOE_EXPERTS,
+            ranks=cfg.MODEL.BACKBONE.MOE_RANKS,
+            top_k=cfg.MODEL.BACKBONE.MOE_TOP_K
         )
 
-        # The injection function unfreezes the new parameters it creates.
-        # We collect these trainable parameters to pass to the optimizer.
         if training:
             moe_params_list = []
             for param_gen in moe_params_generators:
                 if isinstance(param_gen, torch.nn.Parameter):
-                    moe_params_list.append(param_gen)
+                     moe_params_list.append(param_gen)
                 else:
-                    moe_params_list.extend(list(param_gen))
-        
+                     moe_params_list.extend(list(param_gen))
+            
             model.moe_params = moe_params_list
-            print(f"Successfully injected MoE layers. Target modules: {cfg.MODEL.BACKBONE.MOE_TARGET_MODULES}, Where: {cfg.MODEL.BACKBONE.MOE_WHERE}")
+            print(f"Successfully injected MoE layers for training.")
         else:
             print("Successfully injected MoE layers for testing.")
     # ---- END OF MODIFICATION ----

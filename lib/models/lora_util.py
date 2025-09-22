@@ -113,10 +113,16 @@ class K_Linear_MoE_new_(nn.Linear, LoRALayer):
         lora_dropout: float = 0.0,
         fan_in_fan_out: bool = False,  # Set this to True if the layer to replace stores weight like (fan_in, fan_out)
         merge_weights: bool = True,
+        # ---- START OF MODIFICATION ----
+        n: int = 4,
+        ranks: list = [],
+        top_k: int = 1,
+        # ---- END OF MODIFICATION ----
         **kwargs,
     ):
         nn.Linear.__init__(self, in_features, out_features, **kwargs)
-        LoRALayer.__init__(self, r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, merge_weights=merge_weights)
+        # Pass r=1 as a placeholder to LoRALayer, since our rank logic is custom
+        LoRALayer.__init__(self, r=1, lora_alpha=lora_alpha, lora_dropout=lora_dropout, merge_weights=merge_weights)
 
         self.fan_in_fan_out = fan_in_fan_out
         if fan_in_fan_out:
@@ -126,25 +132,35 @@ class K_Linear_MoE_new_(nn.Linear, LoRALayer):
         self._in_feats_per_axis = in_features // phm_dim
         self._out_feats_per_axis = (out_features) // phm_dim
         self.phm_rank = 1
-        self.n = 4
+ # ---- START OF MODIFICATION ----
+        self.n = n
+        self.top_k = top_k
+        self.ranks = ranks
         self.proj_adapter1_left = []
         self.proj_adapter1_right = []
         self.kdropout = []
-        self.router = CosineTopKGate(in_features, self.n)
-        if self.r > 0:
-            for i in range(self.n):
-                self.proj_adapter1_left.append(
-                    nn.Parameter(
-                        torch.Tensor(size=(phm_dim, self._in_feats_per_axis, self.phm_rank * (2**i))),
-                        requires_grad=True,
-                    )
+        self.router = CosineTopKGate(in_features, self.n, k=self.top_k)
+        
+        for i in range(self.n):
+            if self.ranks and len(self.ranks) == self.n:
+                current_rank = self.ranks[i]
+            else:
+                # Fallback to original dynamic rank if ranks are not specified correctly
+                current_rank = self.phm_rank * (2**i)
+            
+            self.proj_adapter1_left.append(
+                nn.Parameter(
+                    torch.Tensor(size=(phm_dim, self._in_feats_per_axis, current_rank)),
+                    requires_grad=True,
                 )
-                self.proj_adapter1_right.append(
-                    nn.Parameter(
-                        torch.Tensor(size=(phm_dim, self.phm_rank * (2**i), self._out_feats_per_axis)),
-                        requires_grad=True,
-                    )
+            )
+            self.proj_adapter1_right.append(
+                nn.Parameter(
+                    torch.Tensor(size=(phm_dim, current_rank, self._out_feats_per_axis)),
+                    requires_grad=True,
                 )
+            )
+        # ---- END OF MODIFICATION ----
 
         self.kdropout = nn.Dropout(0.5)
         self.proj_adapter1_left = nn.ParameterList(self.proj_adapter1_left)
@@ -195,8 +211,16 @@ class K_Linear_MoE_new_(nn.Linear, LoRALayer):
             else:
                 logits_w = logits
             logits_w = F.softmax(logits_w, dim=1)
-            max_logits, top1_indices = torch.max(logits_w, 1, True)
-            ret = torch.zeros_like(logits_w).scatter_(1, top1_indices, 1.0)
+            # ---- START OF MODIFICATION ----
+            # Handle Top-K routing
+            if self.top_k == 1:
+                max_logits, top_indices = torch.max(logits_w, 1, True)
+                ret = torch.zeros_like(logits_w).scatter_(1, top_indices, 1.0)
+                topk_logits = max_logits
+            else:
+                topk_logits, topk_indices = torch.topk(logits_w, self.top_k, dim=1)
+                ret = torch.zeros_like(logits_w).scatter_(1, topk_indices, 1.0)
+            # ---- END OF MODIFICATION ----
             ret = ret * logits_w
             ret = rearrange(ret, '(b c) e -> b c e', b=x.shape[0])
             l = []
@@ -453,6 +477,12 @@ def inject_trainable_moe_lora(
     r=[1, 2, 4, 8],
     loras=None,  # path to lora .pt
     where=None,
+    # ---- START OF MODIFICATION ----
+    n: int = 4,
+    ranks: list = [1, 2, 4, 8], # lora moe uses ranks list directly
+    top_k: int = 1,
+    **kwargs, # absorb unused args
+    # ---- END OF MODIFICATION ----
 ):
     """
     inject lora into model, and returns lora parameter groups.
@@ -751,6 +781,12 @@ def inject_trainable_moe_kronecker_new(
     r=[1, 2, 4, 8],
     loras=None,  # path to lora .pt
     where=None,
+    # ---- START OF MODIFICATION ----
+    n: int = 4,
+    ranks: list = [],
+    top_k: int = 1,
+    **kwargs, # absorb unused args like 'r' from lora
+    # ---- END OF MODIFICATION ----
 ):
     """
     inject lora into model, and returns lora parameter groups.
@@ -776,6 +812,9 @@ def inject_trainable_moe_kronecker_new(
             _tmp = layer(
                 _child_module.in_features,
                 _child_module.out_features,
+                # ---- START OF MODIFICATION ----
+                n=n, ranks=ranks, top_k=top_k
+                # ---- END OF MODIFICATION ----
             )
             _tmp.weight = weight
             if bias is not None:
@@ -800,6 +839,9 @@ def inject_trainable_moe_kronecker_new(
                     _tmp = layer(
                         _child_module.in_features,
                         _child_module.out_features,
+                        # ---- START OF MODIFICATION ----
+                n=n, ranks=ranks, top_k=top_k
+                # ---- END OF MODIFICATION ----
                     )
                     _tmp.weight = weight
                     if bias is not None:
@@ -819,6 +861,9 @@ def inject_trainable_moe_kronecker_new(
                     _tmp = layer(
                         _child_module.in_features,
                         _child_module.out_features,
+                        # ---- START OF MODIFICATION ----
+                n=n, ranks=ranks, top_k=top_k
+                # ---- END OF MODIFICATION ----
                     )
                     _tmp.weight = weight
                     if bias is not None:
@@ -841,6 +886,9 @@ def inject_trainable_moe_kronecker_new(
                     _tmp = layer(
                         _child_module.in_features,
                         _child_module.out_features,
+                        # ---- START OF MODIFICATION ----
+                n=n, ranks=ranks, top_k=top_k
+                # ---- END OF MODIFICATION ----
                     )
                     _tmp.weight = weight
                     if bias is not None:
@@ -860,6 +908,9 @@ def inject_trainable_moe_kronecker_new(
                     _tmp = layer(
                         _child_module.in_features,
                         _child_module.out_features,
+                        # ---- START OF MODIFICATION ----
+                n=n, ranks=ranks, top_k=top_k
+                # ---- END OF MODIFICATION ----
                     )
                     _tmp.weight = weight
                     if bias is not None:
@@ -882,6 +933,9 @@ def inject_trainable_moe_kronecker_new(
             _tmp = layer(
                 _child_module.in_features,
                 _child_module.out_features,
+                # ---- START OF MODIFICATION ----
+                n=n, ranks=ranks, top_k=top_k
+                # ---- END OF MODIFICATION ----
             )
             _tmp.weight = weight
             if bias is not None:

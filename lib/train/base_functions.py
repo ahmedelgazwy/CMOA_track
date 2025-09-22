@@ -155,23 +155,28 @@ def build_dataloaders(cfg, settings):
     return loader_train, loader_val
 
 
-def get_optimizer_scheduler(net, cfg, settings):
-    tracker_name = settings.script_name
-
-    net = net.module if hasattr(net, 'module') else net  
+def get_optimizer_scheduler(net, cfg):
+    model_to_get_params = net.module if hasattr(net, 'module') else net
+    
     param_dicts = [
-        {"params": [p for n, p in net.named_parameters() if "backbone" not in n and p.requires_grad]},
+        {"params": [p for n, p in model_to_get_params.named_parameters() if "backbone" not in n and p.requires_grad]},
         {
-            "params": [p for n, p in net.named_parameters() if "backbone" in n and p.requires_grad],
+            "params": [p for n, p in model_to_get_params.named_parameters() if "backbone" in n and p.requires_grad],
             "lr": cfg.TRAIN.LR * cfg.TRAIN.BACKBONE_MULTIPLIER,
         },
     ]
 
     if is_main_process():
-        print("Learnable parameters are shown below.")
-        for n, p in net.named_parameters():
-            if p.requires_grad:
-                print("Learnable parameters: ", n)
+        print("\n" + "="*80)
+        print("OPTIMIZER AND PARAMETER SUMMARY")
+        total_trainable_params = 0
+        for i, d in enumerate(param_dicts):
+            param_count = sum(p.numel() for p in d['params'])
+            total_trainable_params += param_count
+            print(f"  - Param Group {i}: {param_count/1e6:.3f}M parameters.")
+        
+        print(f"Total Trainable Parameters: {total_trainable_params/1e6:.3f}M")
+        print("="*80 + "\n")
 
     if cfg.TRAIN.OPTIMIZER == "ADAMW":
         optimizer = torch.optim.AdamW(param_dicts, lr=cfg.TRAIN.LR,

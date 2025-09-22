@@ -29,7 +29,14 @@ def parse_args():
     parser.add_argument('--world-size', type=int, help='Number of processes participating in the job.')
     parser.add_argument('--ip', type=str, default='127.0.0.1', help='IP of the current rank 0.')
     parser.add_argument('--port', type=int, default='20000', help='Port of the current rank 0.')
-
+    # ---- START OF MODIFICATION ----
+    # Add MoE specific arguments for ablation
+    parser.add_argument('--moe_experts', type=int, default=None, help='Number of experts in MoE layer.')
+    parser.add_argument('--moe_ranks', type=int, nargs='+', default=None, help='List of ranks for each expert.')
+    parser.add_argument('--moe_top_k', type=int, default=None, help='Number of experts to select (k in Top-K).')
+    parser.add_argument('--moe_where', type=str, default=None, help="Where to inject MoE layers (e.g., 'every', 'last').")
+    parser.add_argument('--moe_type', type=str, default=None, choices=['kronecker', 'lora'], help='Type of expert adapter.')
+    # ---- END OF MODIFICATION ----
     args = parser.parse_args()
 
     return args

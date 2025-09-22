@@ -29,6 +29,19 @@ def run(settings):
     config_module = importlib.import_module("lib.config.%s.config" % settings.script_name)
     cfg = config_module.cfg
     config_module.update_config_from_file(settings.cfg_file)
+    # ---- START OF MODIFICATION ----
+    # Override cfg with command-line arguments if provided
+    if settings.moe_experts is not None:
+        cfg.MODEL.BACKBONE.MOE_EXPERTS = settings.moe_experts
+    if settings.moe_ranks is not None:
+        cfg.MODEL.BACKBONE.MOE_RANKS = settings.moe_ranks
+    if settings.moe_top_k is not None:
+        cfg.MODEL.BACKBONE.MOE_TOP_K = settings.moe_top_k
+    if settings.moe_where is not None:
+        cfg.MODEL.BACKBONE.MOE_WHERE = settings.moe_where
+    if settings.moe_type is not None:
+        cfg.MODEL.BACKBONE.MOE_TYPE = settings.moe_type
+    # ---- END OF MODIFICATION ----
     if settings.local_rank in [-1, 0]:
         print("New configuration is shown below.")
         for key in cfg.keys():
@@ -82,7 +95,7 @@ def run(settings):
 
     # ---- START OF MODIFICATION ----
     model_without_ddp = net.module if settings.local_rank != -1 else net
-    
+     
     if cfg.MODEL.BACKBONE.USE_MOE:
         # If MoE is used, we only want to train the head and the new adapter parameters.
         # The original backbone parameters were already set to requires_grad=False in `build_odtrack`.
@@ -94,7 +107,7 @@ def run(settings):
     # ---- END OF MODIFICATION ----
 
     # Optimizer, parameters, and learning rates
-    optimizer, lr_scheduler = get_optimizer_scheduler(net, cfg, settings)
+    optimizer, lr_scheduler = get_optimizer_scheduler(net, cfg)
     use_amp = getattr(cfg.TRAIN, "AMP", False)
     trainer = LTRTrainer(actor, [loader_train, loader_val], optimizer, settings, lr_scheduler, use_amp=use_amp)
 

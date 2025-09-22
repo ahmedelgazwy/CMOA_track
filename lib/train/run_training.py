@@ -25,7 +25,10 @@ def init_seeds(seed):
 
 def run_training(script_name, config_name, cudnn_benchmark=True, local_rank=-1, save_dir=None, base_seed=None,
                  use_lmdb=False, script_name_prv=None, config_name_prv=None, use_wandb=False,
-                 distill=None, script_teacher=None, config_teacher=None):
+                 distill=None, script_teacher=None, config_teacher=None,
+                 # ---- START OF MODIFICATION ----
+                 moe_experts=None, moe_ranks=None, moe_top_k=None, moe_where=None, moe_type=None):
+                 # ---- END OF MODIFICATION ----
     """Run the train script.
     args:
         script_name: Name of emperiment in the "experiments/" folder.
@@ -60,6 +63,14 @@ def run_training(script_name, config_name, cudnn_benchmark=True, local_rank=-1, 
     prj_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
     settings.cfg_file = os.path.join(prj_dir, 'experiments/%s/%s.yaml' % (script_name, config_name))
     settings.use_wandb = use_wandb
+    # ---- START OF MODIFICATION ----
+    # Pass command-line arguments into the settings object
+    settings.moe_experts = moe_experts
+    settings.moe_ranks = moe_ranks
+    settings.moe_top_k = moe_top_k
+    settings.moe_where = moe_where
+    settings.moe_type = moe_type
+    # ---- END OF MODIFICATION ----
     if distill:
         settings.distill = distill
         settings.script_teacher = script_teacher
@@ -91,6 +102,14 @@ def main():
     parser.add_argument('--distill', type=int, choices=[0, 1], default=0)  # whether to use knowledge distillation
     parser.add_argument('--script_teacher', type=str, help='teacher script name')
     parser.add_argument('--config_teacher', type=str, help='teacher yaml configure file name')
+    # ---- START OF MODIFICATION ----
+    # Add MoE specific arguments for ablation
+    parser.add_argument('--moe_experts', type=int, default=None, help='Number of experts in MoE layer.')
+    parser.add_argument('--moe_ranks', type=int, nargs='+', default=None, help='List of ranks for each expert.')
+    parser.add_argument('--moe_top_k', type=int, default=None, help='Number of experts to select (k in Top-K).')
+    parser.add_argument('--moe_where', type=str, default=None, help="Where to inject MoE layers (e.g., 'every', 'last').")
+    parser.add_argument('--moe_type', type=str, default=None, choices=['kronecker', 'lora'], help='Type of expert adapter.')
+    # ---- END OF MODIFICATION ----
 
     args = parser.parse_args()
     args.local_rank = int(os.environ["LOCAL_RANK"])
@@ -101,7 +120,11 @@ def main():
                  local_rank=args.local_rank, save_dir=args.save_dir, base_seed=args.seed,
                  use_lmdb=args.use_lmdb, script_name_prv=args.script_prv, config_name_prv=args.config_prv,
                  use_wandb=args.use_wandb,
-                 distill=args.distill, script_teacher=args.script_teacher, config_teacher=args.config_teacher)
+                 distill=args.distill, script_teacher=args.script_teacher, config_teacher=args.config_teacher,
+                 # ---- START OF MODIFICATION ----
+                 moe_experts=args.moe_experts, moe_ranks=args.moe_ranks, moe_top_k=args.moe_top_k,
+                 moe_where=args.moe_where, moe_type=args.moe_type)
+                 # ---- END OF MODIFICATION ----
 
 
 if __name__ == '__main__':
